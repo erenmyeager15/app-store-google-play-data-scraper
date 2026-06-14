@@ -1,0 +1,26 @@
+{
+  "name": "app-store-google-play-data-scraper",
+  "version": "1.0.0",
+  "description": "Apify Actor for non-personal Apple App Store and Google Play app metadata.",
+  "main": "dist/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node dist/main.js",
+    "build": "node ./node_modules/typescript/bin/tsc",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit"
+  },
+  "dependencies": {
+    "apify": "^3.2.5",
+    "google-play-scraper": "^10.0.0",
+    "https-proxy-agent": "^7.0.0"
+  },
+  "devDependencies": {
+    "@apify/tsconfig": "^0.1.0",
+    "@types/node": "^20.17.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "Apache-2.0"
+}

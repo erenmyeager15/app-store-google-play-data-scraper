@@ -1,0 +1,33 @@
+{
+  "actorSpecification": 1,
+  "name": "app-store-google-play-data-scraper",
+  "title": "App Store & Google Play Data Scraper",
+  "description": "Aggregate non-personal Apple App Store and Google Play app metadata, ratings counts, prices, versions, screenshots, and store URLs for ASO and app-market research.",
+  "version": "1.0",
+  "dockerfile": "Dockerfile",
+  "input": "../INPUT_SCHEMA.json",
+  "readme": "../README.md",
+  "categories": ["DEVELOPER_TOOLS", "OTHER"],
+  "pricingInfo": {
+    "pricingModel": "PAY_PER_EVENT",
+    "pricingPerEvent": {
+      "actorChargeEvents": {
+        "app-scraped": {
+          "eventTitle": "App scraped",
+          "eventDescription": "Charged once for each clean non-personal app metadata record saved to the dataset.",
+          "eventPriceUsd": 0.001,
+          "isPrimaryEvent": true,
+          "isOneTimeEvent": false
+        }
+      }
+    }
+  },
+  "storages": {
+    "dataset": "./dataset_schema.json"
+  },
+  "defaultRunOptions": {
+    "build": "latest",
+    "memoryMbytes": 1024,
+    "timeoutSecs": 14400
+  }
+}

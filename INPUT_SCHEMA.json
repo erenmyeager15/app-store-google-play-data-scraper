@@ -1,0 +1,97 @@
+{
+  "title": "App Store & Google Play Data Scraper input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "sources": {
+      "title": "Sources",
+      "type": "array",
+      "description": "App marketplaces to query.",
+      "editor": "select",
+      "default": ["app_store", "google_play"],
+      "items": {
+        "type": "string",
+        "enum": ["app_store", "google_play"],
+        "enumTitles": ["Apple App Store", "Google Play Store"]
+      },
+      "uniqueItems": true
+    },
+    "searchQueries": {
+      "title": "Search queries",
+      "type": "array",
+      "description": "Keywords to search in selected stores.",
+      "editor": "stringList",
+      "default": ["whatsapp"],
+      "items": {
+        "type": "string"
+      }
+    },
+    "appIds": {
+      "title": "Apple App Store app IDs",
+      "type": "array",
+      "description": "Apple numeric app IDs or bundle IDs. Example: 310633997.",
+      "editor": "stringList",
+      "items": {
+        "type": "string"
+      }
+    },
+    "packageNames": {
+      "title": "Google Play package names",
+      "type": "array",
+      "description": "Google Play package names or app URLs. Example: com.whatsapp.",
+      "editor": "stringList",
+      "items": {
+        "type": "string"
+      }
+    },
+    "country": {
+      "title": "Country",
+      "type": "string",
+      "description": "Store country/region code, such as us or in.",
+      "editor": "textfield",
+      "default": "us"
+    },
+    "language": {
+      "title": "Language",
+      "type": "string",
+      "description": "Language/locale code, such as en.",
+      "editor": "textfield",
+      "default": "en"
+    },
+    "includeRatingsSummary": {
+      "title": "Include ratings summary",
+      "type": "boolean",
+      "description": "Include aggregate ratings counts and histogram when available. Individual reviews are never output.",
+      "editor": "checkbox",
+      "default": true
+    },
+    "maxResults": {
+      "title": "Maximum app records",
+      "type": "integer",
+      "description": "Maximum clean app records to save across all selected sources.",
+      "editor": "number",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "userAgent": {
+      "title": "User-Agent",
+      "type": "string",
+      "description": "Descriptive User-Agent for public API/page requests.",
+      "editor": "textfield",
+      "default": "AppStoreGooglePlayDataScraper/1.0 app-market-research"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Recommended for Google Play. Apple iTunes API does not need a proxy.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": ["RESIDENTIAL"],
+        "apifyProxyCountry": "US"
+      }
+    }
+  },
+  "required": []
+}

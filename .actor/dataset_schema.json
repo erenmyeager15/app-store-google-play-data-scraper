@@ -1,0 +1,74 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "source": { "type": "string", "title": "Source" },
+    "query": { "type": "string", "title": "Query" },
+    "appId": { "type": "string", "title": "App ID" },
+    "bundleId": { "type": "string", "title": "Bundle / Package" },
+    "appName": { "type": "string", "title": "App" },
+    "developer": { "type": "string", "title": "Developer" },
+    "category": { "type": "string", "title": "Category" },
+    "price": { "type": "number", "title": "Price" },
+    "currency": { "type": "string", "title": "Currency" },
+    "ratingValue": { "type": "number", "title": "Rating" },
+    "ratingCount": { "type": "integer", "title": "Ratings" },
+    "ratingHistogram": { "type": "object", "title": "Rating Histogram" },
+    "installRange": { "type": "string", "title": "Installs" },
+    "version": { "type": "string", "title": "Version" },
+    "contentRating": { "type": "string", "title": "Content Rating" },
+    "releaseDate": { "type": "string", "title": "Released" },
+    "lastUpdated": { "type": "string", "title": "Updated" },
+    "description": { "type": "string", "title": "Description" },
+    "iconUrl": { "type": "string", "title": "Icon" },
+    "screenshots": { "type": "array", "title": "Screenshots" },
+    "appUrl": { "type": "string", "title": "URL" },
+    "country": { "type": "string", "title": "Country" },
+    "scrapedAt": { "type": "string", "title": "Scraped At" }
+  },
+  "views": {
+    "apps": {
+      "title": "Apps",
+      "transformation": {
+        "fields": [
+          "source",
+          "query",
+          "iconUrl",
+          "appName",
+          "developer",
+          "category",
+          "price",
+          "currency",
+          "ratingValue",
+          "ratingCount",
+          "installRange",
+          "version",
+          "contentRating",
+          "lastUpdated",
+          "appUrl",
+          "scrapedAt"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "source": { "label": "Source" },
+          "query": { "label": "Query" },
+          "iconUrl": { "label": "Icon", "format": "image" },
+          "appName": { "label": "App" },
+          "developer": { "label": "Developer" },
+          "category": { "label": "Category" },
+          "price": { "label": "Price" },
+          "currency": { "label": "Currency" },
+          "ratingValue": { "label": "Rating" },
+          "ratingCount": { "label": "Ratings" },
+          "installRange": { "label": "Installs" },
+          "version": { "label": "Version" },
+          "contentRating": { "label": "Content Rating" },
+          "lastUpdated": { "label": "Updated" },
+          "appUrl": { "label": "URL" },
+          "scrapedAt": { "label": "Scraped At" }
+        }
+      }
+    }
+  }
+}

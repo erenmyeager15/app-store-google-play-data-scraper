@@ -1,0 +1,13 @@
+{
+  "sources": ["app_store", "google_play"],
+  "searchQueries": ["whatsapp"],
+  "appIds": ["310633997"],
+  "packageNames": ["com.whatsapp"],
+  "country": "us",
+  "language": "en",
+  "includeRatingsSummary": true,
+  "maxResults": 10,
+  "proxyConfiguration": {
+    "useApifyProxy": false
+  }
+}
