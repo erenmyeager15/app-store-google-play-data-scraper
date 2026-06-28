@@ -1,0 +1,14 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "App Store & Google Play Data Scraper Output",
+  "description": "Structured app metadata records from Apple App Store and Google Play with app IDs, names, developers, categories, prices, ratings, versions, install ranges, screenshots, store URLs, and scraped timestamps.",
+  "type": "object",
+  "properties": {
+    "results": {
+      "type": "string",
+      "title": "App store metadata records",
+      "description": "Clean dataset items containing non-personal public app metadata, ratings summary, pricing, version, media, country, and store URL data.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    }
+  }
+}

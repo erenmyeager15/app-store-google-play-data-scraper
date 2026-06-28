@@ -27,7 +27,7 @@ This Actor does not output individual reviews, reviewer names, reviewer handles,
 | `language` | string | Language code, default `en`. |
 | `includeRatingsSummary` | boolean | Include aggregate ratings only. |
 | `maxResults` | integer | Maximum app records across all selected sources. |
-| `proxyConfiguration` | object | Recommended for Google Play; Apple API does not need proxy. |
+| `proxyConfiguration` | object | Optional for Google Play rate limits; Apple API does not need proxy. |
 
 ## Sample Output
 
@@ -81,7 +81,7 @@ This Actor uses pay-per-event pricing.
 | --- | --- | --- |
 | `app-scraped` | One clean non-personal app metadata record saved | $0.001 |
 
-Charges are made only after a clean app record is pushed to the dataset.
+Each clean app record is saved and charged atomically. Collection stops before further store requests when the user's spending limit is reached.
 
 ## Responsible Use
 

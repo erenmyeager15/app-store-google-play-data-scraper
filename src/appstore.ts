@@ -1,3 +1,4 @@
+import { log } from 'apify';
 import type { AppRecord, AppleApp, AppleSearchResponse } from './types.js';
 import { dateOrNull, fetchJson, normalizeText, numberOrNull, redactPersonalText, uniqueStrings } from './utils.js';
 
@@ -92,11 +93,15 @@ export async function lookupAppStore(
     url.searchParams.set('entity', 'software');
     url.searchParams.set('country', country);
     url.searchParams.set('lang', language);
-    const data = await fetchJson<AppleSearchResponse>(url.toString(), { headers: { 'user-agent': userAgent } });
-    for (const app of data.results ?? []) {
-      if (records.length >= maxRecords) break;
-      const record = mapAppleApp(app, country, 'lookup', includeRatingsSummary);
-      if (record) records.push(record);
+    try {
+      const data = await fetchJson<AppleSearchResponse>(url.toString(), { headers: { 'user-agent': userAgent } });
+      for (const app of data.results ?? []) {
+        if (records.length >= maxRecords) break;
+        const record = mapAppleApp(app, country, 'lookup', includeRatingsSummary);
+        if (record) records.push(record);
+      }
+    } catch (error) {
+      log.warning(`Skipped failed App Store numeric-ID lookup: ${(error as Error).message}`);
     }
   }
 
@@ -107,11 +112,15 @@ export async function lookupAppStore(
     url.searchParams.set('entity', 'software');
     url.searchParams.set('country', country);
     url.searchParams.set('lang', language);
-    const data = await fetchJson<AppleSearchResponse>(url.toString(), { headers: { 'user-agent': userAgent } });
-    for (const app of data.results ?? []) {
-      if (records.length >= maxRecords) break;
-      const record = mapAppleApp(app, country, bundleId, includeRatingsSummary);
-      if (record) records.push(record);
+    try {
+      const data = await fetchJson<AppleSearchResponse>(url.toString(), { headers: { 'user-agent': userAgent } });
+      for (const app of data.results ?? []) {
+        if (records.length >= maxRecords) break;
+        const record = mapAppleApp(app, country, bundleId, includeRatingsSummary);
+        if (record) records.push(record);
+      }
+    } catch (error) {
+      log.warning(`Skipped failed App Store bundle lookup for ${bundleId}: ${(error as Error).message}`);
     }
   }
 

@@ -7,6 +7,7 @@
   "dockerfile": "Dockerfile",
   "input": "../INPUT_SCHEMA.json",
   "readme": "../README.md",
+  "output": "./output_schema.json",
   "categories": ["DEVELOPER_TOOLS", "OTHER"],
   "pricingInfo": {
     "pricingModel": "PAY_PER_EVENT",
@@ -27,7 +28,7 @@
   },
   "defaultRunOptions": {
     "build": "latest",
-    "memoryMbytes": 1024,
-    "timeoutSecs": 14400
+    "memoryMbytes": 512,
+    "timeoutSecs": 3600
   }
 }

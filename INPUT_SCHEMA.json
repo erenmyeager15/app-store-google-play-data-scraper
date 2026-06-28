@@ -84,13 +84,9 @@
     "proxyConfiguration": {
       "title": "Proxy configuration",
       "type": "object",
-      "description": "Recommended for Google Play. Apple iTunes API does not need a proxy.",
+      "description": "Optional for Google Play rate limits. Apple iTunes API does not need a proxy.",
       "editor": "proxy",
-      "default": {
-        "useApifyProxy": true,
-        "apifyProxyGroups": ["RESIDENTIAL"],
-        "apifyProxyCountry": "US"
-      }
+      "default": { "useApifyProxy": false }
     }
   },
   "required": []

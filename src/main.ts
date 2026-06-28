@@ -40,10 +40,7 @@ function normalizeInput(rawInput: ActorInput): NormalizedInput {
 }
 
 async function buildGoogleRequestOptions(input: NormalizedInput): Promise<Record<string, unknown>> {
-  const defaultProxy: ProxyInput =
-    process.env.APIFY_IS_AT_HOME === '1'
-      ? { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'], apifyProxyCountry: input.country.toUpperCase() }
-      : { useApifyProxy: false };
+  const defaultProxy: ProxyInput = { useApifyProxy: false };
   const proxyInput: ProxyInput = input.proxyConfiguration ?? defaultProxy;
   if (!proxyInput.useApifyProxy && !proxyInput.proxyUrls?.length) return {};
 
@@ -65,19 +62,19 @@ function hasForbiddenField(record: AppRecord): boolean {
   return Object.keys(record).some((key) => forbidden.test(key));
 }
 
-async function pushAndCharge(record: AppRecord): Promise<boolean> {
+async function pushAndCharge(record: AppRecord): Promise<{ continue: boolean; saved: boolean }> {
   if (hasForbiddenField(record)) {
     log.warning(`Skipped record with forbidden field name: ${record.source}:${record.appId}`);
-    return true;
+    return { continue: true, saved: false };
   }
 
-  await Actor.pushData(record);
-  const chargeResult = await Actor.charge({ eventName: CHARGE_EVENT });
+  const chargeResult = await Actor.pushData(record, CHARGE_EVENT);
+  const saved = chargeResult.chargedCount > 0 || !chargeResult.eventChargeLimitReached;
   if (chargeResult.eventChargeLimitReached) {
     log.warning('User spending limit reached after saving the last clean app record. Stopping.');
-    return false;
+    return { continue: false, saved };
   }
-  return true;
+  return { continue: true, saved };
 }
 
 async function emitRecords(records: AppRecord[], seen: Set<string>, state: { saved: number; continue: boolean }, maxResults: number): Promise<void> {
@@ -85,9 +82,15 @@ async function emitRecords(records: AppRecord[], seen: Set<string>, state: { sav
     if (!state.continue || state.saved >= maxResults) return;
     const key = `${record.source}:${record.appId}`;
     if (seen.has(key)) continue;
-    seen.add(key);
-    state.continue = await pushAndCharge(record);
-    state.saved += 1;
+    const result = await pushAndCharge(record);
+    if (result.saved) {
+      seen.add(key);
+      state.saved += 1;
+    }
+    state.continue = result.continue;
+    if (!state.continue) {
+      await Actor.setStatusMessage(`Stopped at the user's spending limit after ${state.saved} apps`);
+    }
   }
 }
 
@@ -110,6 +113,16 @@ try {
 
   const seen = new Set<string>();
   const state = { saved: 0, continue: true };
+  let failedRequests = 0;
+  const tryRequest = async (label: string, request: () => Promise<AppRecord[]>): Promise<AppRecord[]> => {
+    try {
+      return await request();
+    } catch (error) {
+      failedRequests += 1;
+      log.warning(`Skipped failed ${label}: ${(error as Error).message}`);
+      return [];
+    }
+  };
   const perSourceBudget = Math.max(1, Math.ceil(input.maxResults / input.sources.length));
   const googleRequestOptions = input.sources.includes('google_play') ? await buildGoogleRequestOptions(input) : {};
 
@@ -119,13 +132,13 @@ try {
 
     if (source === 'app_store') {
       if (input.appIds.length > 0) {
-        const records = await lookupAppStore(input.appIds, perSourceBudget, input.country, input.language, input.includeRatingsSummary, input.userAgent);
+        const records = await tryRequest('App Store ID lookup', () => lookupAppStore(input.appIds, perSourceBudget, input.country, input.language, input.includeRatingsSummary, input.userAgent));
         await emitRecords(records, seen, state, input.maxResults);
       }
       for (const query of input.searchQueries) {
         if (!state.continue || state.saved - sourceSavedBefore >= perSourceBudget) break;
         const remaining = Math.min(perSourceBudget - (state.saved - sourceSavedBefore), input.maxResults - state.saved);
-        const records = await searchAppStore(query, remaining, input.country, input.language, input.includeRatingsSummary, input.userAgent);
+        const records = await tryRequest(`App Store search "${query}"`, () => searchAppStore(query, remaining, input.country, input.language, input.includeRatingsSummary, input.userAgent));
         await emitRecords(records, seen, state, input.maxResults);
       }
     }
@@ -133,26 +146,35 @@ try {
     if (source === 'google_play') {
       sourceSavedBefore = state.saved;
       if (input.packageNames.length > 0) {
-        const records = await lookupGooglePlay(
+        const records = await tryRequest('Google Play package lookup', () => lookupGooglePlay(
           input.packageNames,
           perSourceBudget,
           input.country,
           input.language,
           input.includeRatingsSummary,
           googleRequestOptions,
-        );
+        ));
         await emitRecords(records, seen, state, input.maxResults);
       }
       for (const query of input.searchQueries) {
         if (!state.continue || state.saved - sourceSavedBefore >= perSourceBudget) break;
         const remaining = Math.min(perSourceBudget - (state.saved - sourceSavedBefore), input.maxResults - state.saved);
-        const records = await searchGooglePlay(query, remaining, input.country, input.language, input.includeRatingsSummary, googleRequestOptions);
+        const records = await tryRequest(`Google Play search "${query}"`, () => searchGooglePlay(query, remaining, input.country, input.language, input.includeRatingsSummary, googleRequestOptions));
         await emitRecords(records, seen, state, input.maxResults);
       }
     }
   }
 
-  log.info(`Finished. Saved ${state.saved} clean non-personal app records.`);
+  if (state.saved === 0 && failedRequests > 0 && state.continue) {
+    throw new Error(`No app records were saved; ${failedRequests} request(s) failed. Check the warning logs.`);
+  }
+
+  if (state.continue) {
+    await Actor.setStatusMessage(`Finished with ${state.saved} clean app records`);
+    log.info(`Finished. Saved ${state.saved} clean non-personal app records.`);
+  } else {
+    log.info(`Stopped at the user's spending limit after ${state.saved} clean app records.`);
+  }
 } finally {
   await Actor.exit();
 }

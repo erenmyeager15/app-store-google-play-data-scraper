@@ -1,3 +1,4 @@
+import { log } from 'apify';
 import gplayDefault from 'google-play-scraper';
 import type { AppRecord, RatingHistogram } from './types.js';
 import { dateOrNull, normalizeText, numberOrNull, redactPersonalText, uniqueStrings } from './utils.js';
@@ -86,15 +87,19 @@ export async function lookupGooglePlay(
   const packageNames = uniqueStrings(rawPackageNames.map(normalizePackageName));
   for (const appId of packageNames) {
     if (records.length >= maxRecords) break;
-    const app = await gplay.app({
-      appId,
-      country,
-      lang: language,
-      throttle: 8,
-      requestOptions,
-    });
-    const record = mapGoogleApp(app, country, query, includeRatingsSummary);
-    if (record) records.push(record);
+    try {
+      const app = await gplay.app({
+        appId,
+        country,
+        lang: language,
+        throttle: 8,
+        requestOptions,
+      });
+      const record = mapGoogleApp(app, country, query, includeRatingsSummary);
+      if (record) records.push(record);
+    } catch (error) {
+      log.warning(`Skipped failed Google Play lookup for ${appId}: ${(error as Error).message}`);
+    }
   }
   return records;
 }
