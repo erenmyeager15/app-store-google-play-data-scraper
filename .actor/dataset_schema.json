@@ -19,7 +19,6 @@
     "contentRating": { "type": "string", "title": "Content Rating" },
     "releaseDate": { "type": "string", "title": "Released" },
     "lastUpdated": { "type": "string", "title": "Updated" },
-    "description": { "type": "string", "title": "Description" },
     "iconUrl": { "type": "string", "title": "Icon" },
     "screenshots": { "type": "array", "title": "Screenshots" },
     "appUrl": { "type": "string", "title": "URL" },
