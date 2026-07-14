@@ -1,7 +1,7 @@
 FROM apify/actor-node:20 AS build
 
 COPY package*.json ./
-RUN npm --quiet set progress=false && npm ci
+RUN npm --quiet set progress=false && npm ci --include=dev
 
 COPY . ./
 RUN npm run build
