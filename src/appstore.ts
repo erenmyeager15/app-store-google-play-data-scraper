@@ -1,54 +1,115 @@
-import { log } from 'apify';
-import type { AppRecord, AppleApp, AppleSearchResponse } from './types.js';
-import { dateOrNull, fetchJson, normalizeText, numberOrNull, redactPersonalText, uniqueStrings } from './utils.js';
+import type {
+  AppRecord,
+  AppleApp,
+  AppleSearchResponse,
+  SourceJobOutcome,
+  SourceJobResult,
+} from './types.js';
+import {
+  boundedNumberOrNull,
+  dateOrNull,
+  fetchJson,
+  nonNegativeIntegerOrNull,
+  normalizeText,
+  redactPersonalText,
+  safeErrorMessage,
+  truncateText,
+  uniqueStrings,
+} from './utils.js';
 
 const API_BASE = 'https://itunes.apple.com';
+const MAX_SCREENSHOTS = 20;
+type AppleRequester = <T>(url: string, options?: RequestInit) => Promise<T>;
 
-function normalizeAppleAppId(raw: string): string {
-  const text = raw.trim();
-  const idMatch = text.match(/[?&]id=(\d{5,})/i) ?? text.match(/\/id(\d{5,})/i) ?? text.match(/^(\d{5,})$/);
-  return idMatch?.[1] ?? text;
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isNumericId(value: string): boolean {
-  return /^\d+$/.test(value);
+function assertAppleResponse(value: unknown): AppleSearchResponse {
+  if (!isObject(value) || !Array.isArray(value.results)) {
+    throw new Error('Apple API returned an unexpected response shape.');
+  }
+  return value as AppleSearchResponse;
 }
 
-function mapAppleApp(app: AppleApp, country: string, query: string | null, includeRatingsSummary: boolean): AppRecord | null {
+function currencyOrNull(value: unknown): string | null {
+  const currency = normalizeText(value)?.toUpperCase() ?? null;
+  return currency && /^[A-Z]{3}$/.test(currency) ? currency : null;
+}
+
+export function appleApiLanguage(language: string): 'en_us' | 'ja_jp' {
+  return language.toLowerCase() === 'ja' ? 'ja_jp' : 'en_us';
+}
+
+export function mapAppleApp(
+  app: AppleApp,
+  country: string,
+  language: string,
+  query: string | null,
+  includeRatingsSummary: boolean,
+  scrapedAt = new Date(),
+): AppRecord | null {
   const appId = app.trackId != null ? String(app.trackId) : normalizeText(app.bundleId);
-  if (!appId) return null;
+  const appName = truncateText(redactPersonalText(app.trackName), 500);
+  const appUrl = normalizeText(app.trackViewUrl);
+  if (!appId || !appName || !appUrl) return null;
 
   const screenshots = uniqueStrings([
     ...(app.screenshotUrls ?? []),
     ...(app.ipadScreenshotUrls ?? []),
     ...(app.appletvScreenshotUrls ?? []),
-  ]);
+  ]).slice(0, MAX_SCREENSHOTS);
 
   return {
     source: 'app_store',
     query,
+    recordKey: `app_store:${appId}`,
     appId,
-    bundleId: normalizeText(app.bundleId),
-    appName: redactPersonalText(app.trackName),
-    developer: redactPersonalText(app.sellerName ?? app.artistName),
-    category: redactPersonalText(app.primaryGenreName),
-    price: numberOrNull(app.price),
-    currency: normalizeText(app.currency),
-    ratingValue: includeRatingsSummary ? numberOrNull(app.averageUserRating) : null,
-    ratingCount: includeRatingsSummary ? numberOrNull(app.userRatingCount) : null,
+    bundleId: truncateText(app.bundleId, 255),
+    appName,
+    developer: truncateText(redactPersonalText(app.sellerName ?? app.artistName), 500),
+    category: truncateText(redactPersonalText(app.primaryGenreName), 200),
+    price: boundedNumberOrNull(app.price, 0, 1_000_000_000),
+    currency: currencyOrNull(app.currency),
+    ratingValue: includeRatingsSummary ? boundedNumberOrNull(app.averageUserRating, 0, 5) : null,
+    ratingCount: includeRatingsSummary ? nonNegativeIntegerOrNull(app.userRatingCount) : null,
     ratingHistogram: null,
     installRange: null,
-    version: normalizeText(app.version),
-    contentRating: normalizeText(app.contentAdvisoryRating ?? app.trackContentRating),
+    version: truncateText(app.version, 100),
+    contentRating: truncateText(app.contentAdvisoryRating ?? app.trackContentRating, 100),
     releaseDate: dateOrNull(app.releaseDate),
     lastUpdated: dateOrNull(app.currentVersionReleaseDate),
-    description: redactPersonalText(app.description),
+    description: truncateText(redactPersonalText(app.description), 20_000),
     iconUrl: normalizeText(app.artworkUrl512 ?? app.artworkUrl100 ?? app.artworkUrl60),
     screenshots,
-    appUrl: normalizeText(app.trackViewUrl),
+    appUrl,
     country,
-    scrapedAt: new Date().toISOString(),
+    language,
+    scrapedAt: scrapedAt.toISOString(),
   };
+}
+
+function outcomeForRequests(successfulRequests: number, failedRequests: number): SourceJobOutcome {
+  if (failedRequests > 0 && successfulRequests === 0) return 'failed';
+  if (failedRequests > 0) return 'partial';
+  return 'success';
+}
+
+function appendAppleRecords(
+  target: AppRecord[],
+  data: AppleSearchResponse,
+  maxRecords: number,
+  country: string,
+  language: string,
+  query: string | null,
+  includeRatingsSummary: boolean,
+): void {
+  for (const app of data.results ?? []) {
+    if (target.length >= maxRecords) break;
+    if (app.wrapperType !== 'software' && app.kind !== 'software' && app.trackId == null) continue;
+    const record = mapAppleApp(app, country, language, query, includeRatingsSummary);
+    if (record) target.push(record);
+  }
 }
 
 export async function searchAppStore(
@@ -58,20 +119,22 @@ export async function searchAppStore(
   language: string,
   includeRatingsSummary: boolean,
   userAgent: string,
-): Promise<AppRecord[]> {
+  request: AppleRequester = fetchJson,
+): Promise<SourceJobResult> {
   const url = new URL(`${API_BASE}/search`);
   url.searchParams.set('term', query);
+  url.searchParams.set('media', 'software');
   url.searchParams.set('entity', 'software');
   url.searchParams.set('limit', String(Math.min(Math.max(maxRecords, 1), 200)));
   url.searchParams.set('country', country);
-  url.searchParams.set('lang', language);
+  url.searchParams.set('lang', appleApiLanguage(language));
 
-  const data = await fetchJson<AppleSearchResponse>(url.toString(), { headers: { 'user-agent': userAgent } });
-  return (data.results ?? [])
-    .filter((app) => app.wrapperType === 'software' || app.kind === 'software' || app.trackId != null)
-    .map((app) => mapAppleApp(app, country, query, includeRatingsSummary))
-    .filter((record): record is AppRecord => record !== null)
-    .slice(0, maxRecords);
+  const data = assertAppleResponse(await request<unknown>(url.toString(), {
+    headers: { 'user-agent': userAgent },
+  }));
+  const records: AppRecord[] = [];
+  appendAppleRecords(records, data, maxRecords, country, language, query, includeRatingsSummary);
+  return { records, warnings: [], outcome: 'success' };
 }
 
 export async function lookupAppStore(
@@ -81,27 +144,32 @@ export async function lookupAppStore(
   language: string,
   includeRatingsSummary: boolean,
   userAgent: string,
-): Promise<AppRecord[]> {
+  request: AppleRequester = fetchJson,
+): Promise<SourceJobResult> {
   const records: AppRecord[] = [];
-  const ids = uniqueStrings(rawIds.map(normalizeAppleAppId));
-  const numericIds = ids.filter(isNumericId);
-  const bundleIds = ids.filter((id) => !isNumericId(id));
+  const warnings: string[] = [];
+  let successfulRequests = 0;
+  let failedRequests = 0;
+  const attemptLimit = Math.min(200, Math.max(maxRecords * 2, 10));
+  const ids = uniqueStrings(rawIds).slice(0, attemptLimit);
+  const numericIds = ids.filter((id) => /^\d+$/.test(id));
+  const bundleIds = ids.filter((id) => !/^\d+$/.test(id));
 
   if (numericIds.length > 0 && records.length < maxRecords) {
     const url = new URL(`${API_BASE}/lookup`);
-    url.searchParams.set('id', numericIds.slice(0, 200).join(','));
+    url.searchParams.set('id', numericIds.join(','));
     url.searchParams.set('entity', 'software');
     url.searchParams.set('country', country);
-    url.searchParams.set('lang', language);
+    url.searchParams.set('lang', appleApiLanguage(language));
     try {
-      const data = await fetchJson<AppleSearchResponse>(url.toString(), { headers: { 'user-agent': userAgent } });
-      for (const app of data.results ?? []) {
-        if (records.length >= maxRecords) break;
-        const record = mapAppleApp(app, country, 'lookup', includeRatingsSummary);
-        if (record) records.push(record);
-      }
+      const data = assertAppleResponse(await request<unknown>(url.toString(), {
+        headers: { 'user-agent': userAgent },
+      }));
+      successfulRequests += 1;
+      appendAppleRecords(records, data, maxRecords, country, language, null, includeRatingsSummary);
     } catch (error) {
-      log.warning(`Skipped failed App Store numeric-ID lookup: ${(error as Error).message}`);
+      failedRequests += 1;
+      warnings.push(`Apple numeric-ID lookup failed: ${safeErrorMessage(error)}`);
     }
   }
 
@@ -111,18 +179,22 @@ export async function lookupAppStore(
     url.searchParams.set('bundleId', bundleId);
     url.searchParams.set('entity', 'software');
     url.searchParams.set('country', country);
-    url.searchParams.set('lang', language);
+    url.searchParams.set('lang', appleApiLanguage(language));
     try {
-      const data = await fetchJson<AppleSearchResponse>(url.toString(), { headers: { 'user-agent': userAgent } });
-      for (const app of data.results ?? []) {
-        if (records.length >= maxRecords) break;
-        const record = mapAppleApp(app, country, bundleId, includeRatingsSummary);
-        if (record) records.push(record);
-      }
+      const data = assertAppleResponse(await request<unknown>(url.toString(), {
+        headers: { 'user-agent': userAgent },
+      }));
+      successfulRequests += 1;
+      appendAppleRecords(records, data, maxRecords, country, language, null, includeRatingsSummary);
     } catch (error) {
-      log.warning(`Skipped failed App Store bundle lookup for ${bundleId}: ${(error as Error).message}`);
+      failedRequests += 1;
+      warnings.push(`Apple bundle-ID lookup failed: ${safeErrorMessage(error)}`);
     }
   }
 
-  return records;
+  return {
+    records,
+    warnings,
+    outcome: outcomeForRequests(successfulRequests, failedRequests),
+  };
 }

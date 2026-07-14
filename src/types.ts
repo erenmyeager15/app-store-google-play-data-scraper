@@ -1,5 +1,12 @@
 export type SourceName = 'app_store' | 'google_play';
 
+export interface ProxyInput {
+  useApifyProxy?: boolean;
+  apifyProxyGroups?: string[];
+  apifyProxyCountry?: string;
+  proxyUrls?: string[];
+}
+
 export interface ActorInput {
   sources?: SourceName[];
   searchQueries?: string[];
@@ -10,12 +17,7 @@ export interface ActorInput {
   includeRatingsSummary?: boolean;
   maxResults?: number;
   userAgent?: string;
-  proxyConfiguration?: {
-    useApifyProxy?: boolean;
-    apifyProxyGroups?: string[];
-    apifyProxyCountry?: string;
-    proxyUrls?: string[];
-  };
+  proxyConfiguration?: ProxyInput;
 }
 
 export interface NormalizedInput {
@@ -28,7 +30,7 @@ export interface NormalizedInput {
   includeRatingsSummary: boolean;
   maxResults: number;
   userAgent: string;
-  proxyConfiguration?: ActorInput['proxyConfiguration'];
+  proxyConfiguration?: ProxyInput;
 }
 
 export interface RatingHistogram {
@@ -42,9 +44,10 @@ export interface RatingHistogram {
 export interface AppRecord {
   source: SourceName;
   query: string | null;
+  recordKey: string;
   appId: string;
   bundleId: string | null;
-  appName: string | null;
+  appName: string;
   developer: string | null;
   category: string | null;
   price: number | null;
@@ -60,9 +63,24 @@ export interface AppRecord {
   description: string | null;
   iconUrl: string | null;
   screenshots: string[];
-  appUrl: string | null;
+  appUrl: string;
   country: string;
+  language: string;
   scrapedAt: string;
+}
+
+export type SourceJobOutcome = 'success' | 'partial' | 'failed';
+
+export interface SourceJobResult {
+  records: AppRecord[];
+  warnings: string[];
+  outcome: SourceJobOutcome;
+}
+
+export interface SourceWarning {
+  source: SourceName;
+  operation: string;
+  message: string;
 }
 
 export interface AppleSearchResponse {
@@ -78,12 +96,9 @@ export interface AppleApp {
   artistName?: string;
   primaryGenreName?: string;
   price?: number;
-  formattedPrice?: string;
   currency?: string;
   averageUserRating?: number;
   userRatingCount?: number;
-  averageUserRatingForCurrentVersion?: number;
-  userRatingCountForCurrentVersion?: number;
   version?: string;
   contentAdvisoryRating?: string;
   trackContentRating?: string;
@@ -99,4 +114,9 @@ export interface AppleApp {
   trackViewUrl?: string;
   wrapperType?: string;
   kind?: string;
+}
+
+export interface GooglePlayClient {
+  search(options: Record<string, unknown>): Promise<unknown>;
+  app(options: Record<string, unknown>): Promise<unknown>;
 }

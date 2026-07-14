@@ -19,7 +19,7 @@ This Actor focuses on app-level public metadata and aggregate ratings. It does n
 | Apple App Store | `app_store` | Apple numeric app IDs, bundle IDs, or keyword search | iOS app metadata, ratings summary, price, version, release/update dates |
 | Google Play Store | `google_play` | Package names, Google Play URLs, or keyword search | Android app metadata, ratings summary, histogram, installs, price, version, screenshots |
 
-Apple data is fetched through public iTunes Search and Lookup APIs. Google Play data is fetched from public app-level metadata pages through the app metadata library used by the Actor.
+Apple data is fetched through the public iTunes Search and Lookup APIs. Google Play data is parsed from public app-level store pages. Requests are bounded and retried only for transient failures; permanent errors and unusable parser responses are not hidden as empty success.
 
 ## Use Cases
 
@@ -81,13 +81,13 @@ Apple data is fetched through public iTunes Search and Lookup APIs. Google Play 
 | `appIds` | array | Empty | Apple numeric app IDs, App Store URLs, or bundle IDs. Example: `310633997`. |
 | `packageNames` | array | Empty | Google Play package names or app URLs. Example: `com.whatsapp`. |
 | `country` | string | `us` | Store country/region code, such as `us`, `in`, or `gb`. |
-| `language` | string | `en` | Language/locale code. |
+| `language` | string | `en` | Two-letter language code. Google Play receives it directly. Apple returns English for most values and Japanese for `ja`, matching Apple's supported API response languages. |
 | `includeRatingsSummary` | boolean | `true` | Include aggregate ratings and Google Play histogram when available. Individual reviews are never output. |
 | `maxResults` | integer | `10` | Maximum clean app metadata records to save across selected sources, capped at `1000`. |
 | `userAgent` | string | `AppStoreGooglePlayDataScraper/1.0 app-market-research` | Descriptive User-Agent for public API/page requests. |
-| `proxyConfiguration` | object | No proxy | Optional for Google Play rate limits. Apple iTunes API does not need a proxy. |
+| `proxyConfiguration` | object | No proxy | Optional for Google Play. If a requested proxy cannot be created, the run stops instead of silently using a direct connection. Apple iTunes API requests never use this proxy setting. |
 
-If no search terms or direct IDs are provided, the Actor uses a safe WhatsApp sample: keyword `whatsapp`, Apple app ID `310633997`, and Google Play package `com.whatsapp`.
+If all three target fields are omitted, the Actor uses the safe sample keyword `whatsapp`. If target fields are explicitly supplied as empty arrays, validation fails so a production run cannot accidentally scrape an unrelated sample.
 
 ## Output Overview
 
@@ -95,7 +95,7 @@ Each dataset item is one clean app-level record.
 
 | Field group | Example fields |
 | --- | --- |
-| Store and identity | `source`, `query`, `appId`, `bundleId`, `appName`, `appUrl`, `country`, `scrapedAt` |
+| Store and identity | `source`, `query`, `recordKey`, `appId`, `bundleId`, `appName`, `appUrl`, `country`, `language`, `scrapedAt` |
 | Publisher and category | `developer`, `category`, `contentRating` |
 | Price and availability | `price`, `currency`, `installRange` |
 | Ratings summary | `ratingValue`, `ratingCount`, `ratingHistogram` |
@@ -108,6 +108,7 @@ Each dataset item is one clean app-level record.
 {
   "source": "google_play",
   "query": "whatsapp",
+  "recordKey": "google_play:com.whatsapp",
   "appId": "com.whatsapp",
   "bundleId": "com.whatsapp",
   "appName": "WhatsApp Messenger",
@@ -134,9 +135,26 @@ Each dataset item is one clean app-level record.
   "screenshots": ["https://..."],
   "appUrl": "https://play.google.com/store/apps/details?id=com.whatsapp",
   "country": "us",
+  "language": "en",
   "scrapedAt": "2026-06-14T00:00:00.000Z"
 }
 ```
+
+`recordKey` is stable and source-scoped, so downstream workflows can deduplicate or compare snapshots without depending on the scrape time.
+
+## Run Outcomes And Automation
+
+Every run writes `RUN_SUMMARY` to the default key-value store. The output schema links to it directly.
+
+| Outcome | Meaning |
+| --- | --- |
+| `success` | One or more clean records were saved without source warnings. |
+| `empty` | Requests succeeded but no matching apps were found. |
+| `partial` | At least one operation worked and at least one warning or source failure occurred. |
+| `charge_limit` | Collection stopped at the user's maximum charge limit. |
+| `failed` | Every attempted store operation failed; the Actor run fails instead of returning a false empty result. |
+
+The summary includes saved, attempted, successful, and failed operation counts; warning totals; locale; selected sources; and spending-limit status. This makes schedules, webhooks, API clients, and AI-agent workflows able to distinguish a real zero-result search from a source outage.
 
 ## Tips For Better Results
 
@@ -151,6 +169,9 @@ Each dataset item is one clean app-level record.
 - The Actor collects app-level public metadata, not individual review text or reviewer profiles.
 - Google Play install range is approximate and only available when the source exposes it.
 - Apple and Google store pages can vary by country, language, and source availability.
+- Google Play metadata depends on parsing public store pages. Layout or anti-automation changes can temporarily cause partial or failed runs; the Actor reports those states explicitly, but no page parser can guarantee permanent compatibility.
+- Apple documents an approximate Search API limit of 20 calls per minute. Apple requests are paced to remain within that published guidance.
+- Store-hosted icons and screenshots remain subject to the source platforms' terms and applicable brand or media-use rules.
 - Descriptions are redacted for email/phone-like text before output.
 - Ratings and update timestamps reflect the store data available at run time.
 
@@ -160,9 +181,10 @@ This Actor uses pay-per-event pricing.
 
 | Event | When charged | Price |
 | --- | --- | --- |
+| Actor start | When the Actor starts; priced by allocated memory | `$0.00005` per GB |
 | `app-scraped` | One clean non-personal app metadata record saved | `$0.001` |
 
-Each clean app record is saved and charged atomically. Collection stops before further store requests when the user's spending limit is reached.
+These are the active Store prices at the time of this update; the price shown in Apify Console is authoritative. Each clean app record is saved and charged atomically. Collection stops before further store requests when the user's spending limit is reached.
 
 ## Data Safety
 

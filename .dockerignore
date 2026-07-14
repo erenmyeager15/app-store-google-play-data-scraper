@@ -1,6 +1,10 @@
 node_modules/
 dist/
 storage/
+apify_storage/
 .git/
+.github/
 .env
+.env.*
 *.log
+*.tsbuildinfo

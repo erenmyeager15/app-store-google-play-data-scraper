@@ -1,108 +1,125 @@
 import { Actor, log } from 'apify';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { lookupAppStore, searchAppStore } from './appstore.js';
+import { allocateBudget, pushUniqueRecords } from './billing.js';
 import { lookupGooglePlay, searchGooglePlay } from './googleplay.js';
-import type { ActorInput, AppRecord, NormalizedInput, SourceName } from './types.js';
-import { normalizeText, uniqueStrings } from './utils.js';
+import { normalizeInput } from './input.js';
+import { assertSafeRecord } from './recordSafety.js';
+import { classifyRunOutcome } from './runOutcome.js';
+import type {
+  AppRecord,
+  NormalizedInput,
+  SourceJobResult,
+  SourceName,
+  SourceWarning,
+} from './types.js';
+import { safeErrorMessage } from './utils.js';
 
 const CHARGE_EVENT = 'app-scraped';
-const DEFAULT_SOURCES: SourceName[] = ['app_store', 'google_play'];
-const SOURCE_SET = new Set<SourceName>(DEFAULT_SOURCES);
-const DEFAULT_USER_AGENT = 'AppStoreGooglePlayDataScraper/1.0 app-market-research';
-type ProxyInput = NonNullable<ActorInput['proxyConfiguration']>;
+const MAX_REPORTED_WARNINGS = 50;
 
-function normalizeSources(values: unknown): SourceName[] {
-  if (!Array.isArray(values)) return DEFAULT_SOURCES;
-  const sources = values
-    .map((source) => normalizeText(source))
-    .filter((source): source is SourceName => source !== null && SOURCE_SET.has(source as SourceName));
-  return sources.length > 0 ? [...new Set(sources)] : DEFAULT_SOURCES;
+interface SourceJob {
+  source: SourceName;
+  label: string;
+  run: (limit: number) => Promise<SourceJobResult>;
 }
 
-function normalizeList(values: unknown): string[] {
-  return Array.isArray(values) ? uniqueStrings(values) : [];
+interface GoogleRequestContext {
+  requestOptions: Record<string, unknown>;
+  close: () => void;
 }
 
-function normalizeInput(rawInput: ActorInput): NormalizedInput {
-  const country = (normalizeText(rawInput.country) ?? 'us').toLowerCase();
-  return {
-    sources: normalizeSources(rawInput.sources),
-    searchQueries: normalizeList(rawInput.searchQueries),
-    appIds: normalizeList(rawInput.appIds),
-    packageNames: normalizeList(rawInput.packageNames),
-    country,
-    language: (normalizeText(rawInput.language) ?? 'en').toLowerCase(),
-    includeRatingsSummary: rawInput.includeRatingsSummary !== false,
-    maxResults: Math.min(Math.max(Number(rawInput.maxResults ?? 10), 1), 1000),
-    userAgent: normalizeText(rawInput.userAgent) ?? DEFAULT_USER_AGENT,
-    proxyConfiguration: rawInput.proxyConfiguration,
+function proxyRequested(input: NormalizedInput): boolean {
+  return Boolean(input.proxyConfiguration?.useApifyProxy || input.proxyConfiguration?.proxyUrls?.length);
+}
+
+async function createGoogleRequestContext(input: NormalizedInput): Promise<GoogleRequestContext> {
+  const requestOptions: Record<string, unknown> = {
+    timeout: { request: 25_000 },
+    retry: { limit: 0 },
+    headers: { 'user-agent': input.userAgent },
   };
+  if (!proxyRequested(input)) return { requestOptions, close: () => undefined };
+
+  const proxyConfiguration = await Actor.createProxyConfiguration(input.proxyConfiguration);
+  const proxyUrl = await proxyConfiguration?.newUrl();
+  if (!proxyUrl) throw new Error('Requested proxy configuration did not produce a proxy URL.');
+  const agent = new HttpsProxyAgent(proxyUrl);
+  requestOptions.agent = { http: agent, https: agent };
+  log.info('Google Play requests will use the requested proxy configuration.');
+  return { requestOptions, close: () => agent.destroy() };
 }
 
-async function buildGoogleRequestOptions(input: NormalizedInput): Promise<Record<string, unknown>> {
-  const defaultProxy: ProxyInput = { useApifyProxy: false };
-  const proxyInput: ProxyInput = input.proxyConfiguration ?? defaultProxy;
-  if (!proxyInput.useApifyProxy && !proxyInput.proxyUrls?.length) return {};
-
-  try {
-    const proxyConfiguration = await Actor.createProxyConfiguration(proxyInput);
-    const proxyUrl = await proxyConfiguration?.newUrl();
-    if (!proxyUrl) return {};
-    const agent = new HttpsProxyAgent(proxyUrl);
-    log.info('Google Play requests will use proxy configuration.');
-    return { agent: { https: agent, http: agent } };
-  } catch (error) {
-    log.warning(`Proxy configuration unavailable; continuing without proxy: ${(error as Error).message}`);
-    return {};
+function jobsForSource(
+  input: NormalizedInput,
+  source: SourceName,
+  googleRequestOptions: Record<string, unknown>,
+): SourceJob[] {
+  if (source === 'app_store') {
+    return [
+      ...(input.appIds.length ? [{
+        source,
+        label: 'Apple app ID lookup',
+        run: (limit: number) => lookupAppStore(
+          input.appIds,
+          limit,
+          input.country,
+          input.language,
+          input.includeRatingsSummary,
+          input.userAgent,
+        ),
+      }] : []),
+      ...input.searchQueries.map((query): SourceJob => ({
+        source,
+        label: `Apple search: ${query}`,
+        run: (limit) => searchAppStore(
+          query,
+          limit,
+          input.country,
+          input.language,
+          input.includeRatingsSummary,
+          input.userAgent,
+        ),
+      })),
+    ];
   }
-}
 
-function hasForbiddenField(record: AppRecord): boolean {
-  const forbidden = /(reviewer|userName|developerEmail|email|phone|contact)/i;
-  return Object.keys(record).some((key) => forbidden.test(key));
-}
-
-async function pushAndCharge(record: AppRecord): Promise<{ continue: boolean; saved: boolean }> {
-  if (hasForbiddenField(record)) {
-    log.warning(`Skipped record with forbidden field name: ${record.source}:${record.appId}`);
-    return { continue: true, saved: false };
-  }
-
-  const chargeResult = await Actor.pushData(record, CHARGE_EVENT);
-  const saved = chargeResult.chargedCount > 0 || !chargeResult.eventChargeLimitReached;
-  if (chargeResult.eventChargeLimitReached) {
-    log.warning('User spending limit reached after saving the last clean app record. Stopping.');
-    return { continue: false, saved };
-  }
-  return { continue: true, saved };
-}
-
-async function emitRecords(records: AppRecord[], seen: Set<string>, state: { saved: number; continue: boolean }, maxResults: number): Promise<void> {
-  for (const record of records) {
-    if (!state.continue || state.saved >= maxResults) return;
-    const key = `${record.source}:${record.appId}`;
-    if (seen.has(key)) continue;
-    const result = await pushAndCharge(record);
-    if (result.saved) {
-      seen.add(key);
-      state.saved += 1;
-    }
-    state.continue = result.continue;
-    if (!state.continue) {
-      await Actor.setStatusMessage(`Stopped at the user's spending limit after ${state.saved} apps`);
-    }
-  }
+  return [
+    ...(input.packageNames.length ? [{
+      source,
+      label: 'Google Play package lookup',
+      run: (limit: number) => lookupGooglePlay(
+        input.packageNames,
+        limit,
+        input.country,
+        input.language,
+        input.includeRatingsSummary,
+        googleRequestOptions,
+      ),
+    }] : []),
+    ...input.searchQueries.map((query): SourceJob => ({
+      source,
+      label: `Google Play search: ${query}`,
+      run: (limit) => searchGooglePlay(
+        query,
+        limit,
+        input.country,
+        input.language,
+        input.includeRatingsSummary,
+        googleRequestOptions,
+      ),
+    })),
+  ];
 }
 
 await Actor.init();
+let googleContext: GoogleRequestContext | null = null;
 
 try {
-  const input = normalizeInput((await Actor.getInput<ActorInput>()) ?? {});
-  if (input.searchQueries.length === 0 && input.appIds.length === 0 && input.packageNames.length === 0) {
-    input.searchQueries.push('whatsapp');
-    input.appIds.push('310633997');
-    input.packageNames.push('com.whatsapp');
-  }
+  const input = normalizeInput((await Actor.getInput<unknown>()) ?? {});
+  googleContext = input.sources.includes('google_play')
+    ? await createGoogleRequestContext(input)
+    : { requestOptions: {}, close: () => undefined };
 
   log.info('Starting App Store & Google Play Data Scraper', {
     sources: input.sources,
@@ -112,69 +129,135 @@ try {
   });
 
   const seen = new Set<string>();
-  const state = { saved: 0, continue: true };
-  let failedRequests = 0;
-  const tryRequest = async (label: string, request: () => Promise<AppRecord[]>): Promise<AppRecord[]> => {
-    try {
-      return await request();
-    } catch (error) {
-      failedRequests += 1;
-      log.warning(`Skipped failed ${label}: ${(error as Error).message}`);
-      return [];
-    }
+  const warnings: SourceWarning[] = [];
+  let warningCount = 0;
+  let omittedWarnings = 0;
+  let savedCount = 0;
+  let attemptedJobs = 0;
+  let successfulJobs = 0;
+  let failedJobs = 0;
+  let stoppedByChargeLimit = false;
+
+  const addWarning = (warning: SourceWarning): void => {
+    warningCount += 1;
+    if (warnings.length < MAX_REPORTED_WARNINGS) warnings.push(warning);
+    else omittedWarnings += 1;
+    log.warning('App source warning', warning);
   };
-  const perSourceBudget = Math.max(1, Math.ceil(input.maxResults / input.sources.length));
-  const googleRequestOptions = input.sources.includes('google_play') ? await buildGoogleRequestOptions(input) : {};
 
-  for (const source of input.sources) {
-    if (!state.continue || state.saved >= input.maxResults) break;
-    let sourceSavedBefore = state.saved;
+  for (const [sourceIndex, source] of input.sources.entries()) {
+    if (savedCount >= input.maxResults || stoppedByChargeLimit) break;
+    const sourceJobs = jobsForSource(input, source, googleContext.requestOptions);
+    const sourceTarget = allocateBudget(
+      input.maxResults - savedCount,
+      input.sources.length - sourceIndex,
+    );
+    let sourceSaved = 0;
 
-    if (source === 'app_store') {
-      if (input.appIds.length > 0) {
-        const records = await tryRequest('App Store ID lookup', () => lookupAppStore(input.appIds, perSourceBudget, input.country, input.language, input.includeRatingsSummary, input.userAgent));
-        await emitRecords(records, seen, state, input.maxResults);
-      }
-      for (const query of input.searchQueries) {
-        if (!state.continue || state.saved - sourceSavedBefore >= perSourceBudget) break;
-        const remaining = Math.min(perSourceBudget - (state.saved - sourceSavedBefore), input.maxResults - state.saved);
-        const records = await tryRequest(`App Store search "${query}"`, () => searchAppStore(query, remaining, input.country, input.language, input.includeRatingsSummary, input.userAgent));
-        await emitRecords(records, seen, state, input.maxResults);
-      }
-    }
+    for (const [jobIndex, job] of sourceJobs.entries()) {
+      if (sourceSaved >= sourceTarget || savedCount >= input.maxResults || stoppedByChargeLimit) break;
+      const jobBudget = Math.min(
+        allocateBudget(sourceTarget - sourceSaved, sourceJobs.length - jobIndex),
+        input.maxResults - savedCount,
+      );
+      if (jobBudget <= 0) break;
+      attemptedJobs += 1;
 
-    if (source === 'google_play') {
-      sourceSavedBefore = state.saved;
-      if (input.packageNames.length > 0) {
-        const records = await tryRequest('Google Play package lookup', () => lookupGooglePlay(
-          input.packageNames,
-          perSourceBudget,
-          input.country,
-          input.language,
-          input.includeRatingsSummary,
-          googleRequestOptions,
-        ));
-        await emitRecords(records, seen, state, input.maxResults);
+      let result: SourceJobResult;
+      try {
+        result = await job.run(jobBudget);
+      } catch (error) {
+        failedJobs += 1;
+        addWarning({ source, operation: job.label, message: safeErrorMessage(error) });
+        continue;
       }
-      for (const query of input.searchQueries) {
-        if (!state.continue || state.saved - sourceSavedBefore >= perSourceBudget) break;
-        const remaining = Math.min(perSourceBudget - (state.saved - sourceSavedBefore), input.maxResults - state.saved);
-        const records = await tryRequest(`Google Play search "${query}"`, () => searchGooglePlay(query, remaining, input.country, input.language, input.includeRatingsSummary, googleRequestOptions));
-        await emitRecords(records, seen, state, input.maxResults);
+
+      for (const message of result.warnings) {
+        addWarning({ source, operation: job.label, message: safeErrorMessage(message) });
       }
+
+      const safeRecords: AppRecord[] = [];
+      for (const record of result.records) {
+        try {
+          safeRecords.push(assertSafeRecord(record));
+        } catch (error) {
+          addWarning({
+            source,
+            operation: job.label,
+            message: `Skipped unsafe or malformed app record: ${safeErrorMessage(error)}`,
+          });
+        }
+      }
+
+      const fullyUnusable = result.outcome === 'failed'
+        || (result.records.length > 0 && safeRecords.length === 0);
+      if (fullyUnusable) {
+        failedJobs += 1;
+        continue;
+      }
+      successfulJobs += 1;
+
+      // A dataset save failure is fatal. Retrying an ambiguous write could duplicate billing.
+      const saveResult = await pushUniqueRecords(
+        safeRecords,
+        seen,
+        Math.min(jobBudget, sourceTarget - sourceSaved, input.maxResults - savedCount),
+        (record) => Actor.pushData(record, CHARGE_EVENT),
+      );
+      savedCount += saveResult.saved;
+      sourceSaved += saveResult.saved;
+      stoppedByChargeLimit = saveResult.stoppedByChargeLimit;
     }
   }
 
-  if (state.saved === 0 && failedRequests > 0 && state.continue) {
-    throw new Error(`No app records were saved; ${failedRequests} request(s) failed. Check the warning logs.`);
+  const outcome = classifyRunOutcome({
+    attemptedJobs,
+    successfulJobs,
+    warningCount,
+    savedCount,
+    stoppedByChargeLimit,
+  });
+  await Actor.setValue('RUN_SUMMARY', {
+    generatedAt: new Date().toISOString(),
+    outcome,
+    savedCount,
+    attemptedOperations: attemptedJobs,
+    successfulOperations: successfulJobs,
+    failedOperations: failedJobs,
+    warningCount,
+    omittedWarnings,
+    stoppedByChargeLimit,
+    sources: input.sources,
+    country: input.country,
+    language: input.language,
+    warnings,
+  });
+
+  if (outcome === 'failed') {
+    throw new Error(`All ${attemptedJobs} selected app-store operation(s) failed. See RUN_SUMMARY.`);
   }
 
-  if (state.continue) {
-    await Actor.setStatusMessage(`Finished with ${state.saved} clean app records`);
-    log.info(`Finished. Saved ${state.saved} clean non-personal app records.`);
+  let statusMessage: string;
+  if (stoppedByChargeLimit) {
+    statusMessage = `Stopped at the user's spending limit after ${savedCount} app(s).`;
+    log.warning(statusMessage);
+  } else if (warningCount > 0) {
+    statusMessage = `Finished with ${savedCount} app(s) and ${warningCount} source warning(s).`;
+    log.warning(statusMessage);
+  } else if (savedCount === 0) {
+    statusMessage = 'Finished successfully: no matching apps were found.';
+    log.info(statusMessage);
   } else {
-    log.info(`Stopped at the user's spending limit after ${state.saved} clean app records.`);
+    statusMessage = `Finished with ${savedCount} unique app record(s).`;
+    log.info('App metadata scrape finished', { savedCount });
   }
+  await Actor.setStatusMessage(statusMessage);
+} catch (error) {
+  const message = safeErrorMessage(error);
+  log.exception(error as Error, 'App Store & Google Play actor failed');
+  await Actor.fail(`Failed: ${message}`);
 } finally {
-  await Actor.exit();
+  googleContext?.close();
 }
+
+await Actor.exit();

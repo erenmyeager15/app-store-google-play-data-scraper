@@ -3,6 +3,7 @@
   "fields": {
     "source": { "type": "string", "title": "Source" },
     "query": { "type": "string", "title": "Query" },
+    "recordKey": { "type": "string", "title": "Stable Record Key" },
     "appId": { "type": "string", "title": "App ID" },
     "bundleId": { "type": "string", "title": "Bundle / Package" },
     "appName": { "type": "string", "title": "App" },
@@ -18,10 +19,12 @@
     "contentRating": { "type": "string", "title": "Content Rating" },
     "releaseDate": { "type": "string", "title": "Released" },
     "lastUpdated": { "type": "string", "title": "Updated" },
+    "description": { "type": "string", "title": "Description" },
     "iconUrl": { "type": "string", "title": "Icon" },
     "screenshots": { "type": "array", "title": "Screenshots" },
     "appUrl": { "type": "string", "title": "URL" },
     "country": { "type": "string", "title": "Country" },
+    "language": { "type": "string", "title": "Language" },
     "scrapedAt": { "type": "string", "title": "Scraped At" }
   },
   "views": {
@@ -31,6 +34,7 @@
         "fields": [
           "source",
           "query",
+          "recordKey",
           "iconUrl",
           "appName",
           "developer",
@@ -43,6 +47,8 @@
           "version",
           "contentRating",
           "lastUpdated",
+          "country",
+          "language",
           "appUrl",
           "scrapedAt"
         ]
@@ -52,6 +58,7 @@
         "properties": {
           "source": { "label": "Source" },
           "query": { "label": "Query" },
+          "recordKey": { "label": "Record Key" },
           "iconUrl": { "label": "Icon", "format": "image" },
           "appName": { "label": "App" },
           "developer": { "label": "Developer" },
@@ -64,6 +71,8 @@
           "version": { "label": "Version" },
           "contentRating": { "label": "Content Rating" },
           "lastUpdated": { "label": "Updated" },
+          "country": { "label": "Country" },
+          "language": { "label": "Language" },
           "appUrl": { "label": "URL" },
           "scrapedAt": { "label": "Scraped At" }
         }
