@@ -8,7 +8,8 @@
     "start": "node dist/main.js",
     "build": "node ./node_modules/typescript/bin/tsc",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
-    "test": "npm run build && node --test dist/audit.test.js"
+    "test": "npm run build && node --test dist/audit.test.js",
+    "audit:prod": "node scripts/audit-production.mjs"
   },
   "dependencies": {
     "apify": "^3.2.5",
