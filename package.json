@@ -9,7 +9,7 @@
     "build": "node ./node_modules/typescript/bin/tsc",
     "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
     "test": "npm run build && node --test dist/audit.test.js",
-    "audit:prod": "node scripts/audit-production.mjs"
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "apify": "^3.2.5",
@@ -20,6 +20,9 @@
     "@apify/tsconfig": "^0.1.0",
     "@types/node": "^20.17.0",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8"
   },
   "engines": {
     "node": ">=20.0.0"
