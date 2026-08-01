@@ -8,7 +8,8 @@
   "input": "../INPUT_SCHEMA.json",
   "readme": "../README.md",
   "output": "./output_schema.json",
-  "categories": ["BUSINESS", "DEVELOPER_TOOLS", "OTHER"],
+  "categories": ["BUSINESS", "DEVELOPER_TOOLS"],
+  "categoriesVersion": "1.0.0",
   "pricingInfo": {
     "pricingModel": "PAY_PER_EVENT",
     "pricingPerEvent": {

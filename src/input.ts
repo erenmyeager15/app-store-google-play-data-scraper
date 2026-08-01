@@ -193,7 +193,7 @@ export function normalizeInput(rawInput: unknown): NormalizedInput {
 
   const includeRatingsSummary = rawInput.includeRatingsSummary ?? true;
   if (typeof includeRatingsSummary !== 'boolean') throw new Error('includeRatingsSummary must be a boolean.');
-  const maxResults = rawInput.maxResults ?? 10;
+  const maxResults = rawInput.maxResults ?? 1;
   if (!Number.isInteger(maxResults) || Number(maxResults) < 1 || Number(maxResults) > 1000) {
     throw new Error('maxResults must be an integer between 1 and 1000.');
   }

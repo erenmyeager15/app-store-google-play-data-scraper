@@ -41,7 +41,7 @@ Apple data is fetched through the public iTunes Search and Lookup APIs. Google P
   "country": "us",
   "language": "en",
   "includeRatingsSummary": true,
-  "maxResults": 10
+  "maxResults": 1
 }
 ```
 
@@ -55,7 +55,7 @@ Apple data is fetched through the public iTunes Search and Lookup APIs. Google P
   "country": "us",
   "language": "en",
   "includeRatingsSummary": true,
-  "maxResults": 10
+  "maxResults": 1
 }
 ```
 
@@ -83,7 +83,7 @@ Apple data is fetched through the public iTunes Search and Lookup APIs. Google P
 | `country` | string | `us` | Store country/region code, such as `us`, `in`, or `gb`. |
 | `language` | string | `en` | Two-letter language code. Google Play receives it directly. Apple returns English for most values and Japanese for `ja`, matching Apple's supported API response languages. |
 | `includeRatingsSummary` | boolean | `true` | Include aggregate ratings and Google Play histogram when available. Individual reviews are never output. |
-| `maxResults` | integer | `10` | Maximum clean app metadata records to save across selected sources, capped at `1000`. |
+| `maxResults` | integer | `1` | Maximum clean app metadata records to save across selected sources, capped at `1000`. |
 | `userAgent` | string | `AppStoreGooglePlayDataScraper/1.0 app-market-research` | Descriptive User-Agent for public API/page requests. |
 | `proxyConfiguration` | object | No proxy | Optional for Google Play. If a requested proxy cannot be created, the run stops instead of silently using a direct connection. Apple iTunes API requests never use this proxy setting. |
 
@@ -102,41 +102,35 @@ Each dataset item is one clean app-level record.
 | Version and dates | `version`, `releaseDate`, `lastUpdated` |
 | Media and text | `description`, `iconUrl`, `screenshots` |
 
-## Sample Output
+## Verified Sample Output
+
+This abbreviated record was mapped from Apple's public lookup response for ChatGPT on August 2, 2026. Store values can change after collection.
 
 ```json
 {
-  "source": "google_play",
-  "query": "whatsapp",
-  "recordKey": "google_play:com.whatsapp",
-  "appId": "com.whatsapp",
-  "bundleId": "com.whatsapp",
-  "appName": "WhatsApp Messenger",
-  "developer": "WhatsApp LLC",
-  "category": "Communication",
+  "source": "app_store",
+  "query": null,
+  "recordKey": "app_store:6448311069",
+  "appId": "6448311069",
+  "bundleId": "com.openai.chat",
+  "appName": "ChatGPT",
+  "developer": "OpenAI OpCo, LLC",
+  "category": "Productivity",
   "price": 0,
   "currency": "USD",
-  "ratingValue": 4.3,
-  "ratingCount": 200000000,
-  "ratingHistogram": {
-    "oneStar": 1000000,
-    "twoStar": 500000,
-    "threeStar": 900000,
-    "fourStar": 3000000,
-    "fiveStar": 15000000
-  },
-  "installRange": "5,000,000,000+",
-  "version": "Varies with device",
-  "contentRating": "Everyone",
-  "releaseDate": "2010-10-18T00:00:00.000Z",
-  "lastUpdated": "2026-06-01T00:00:00.000Z",
-  "description": "Simple. Reliable. Private messaging...",
-  "iconUrl": "https://...",
-  "screenshots": ["https://..."],
-  "appUrl": "https://play.google.com/store/apps/details?id=com.whatsapp",
+  "ratingValue": 4.83068,
+  "ratingCount": 9028052,
+  "ratingHistogram": null,
+  "installRange": null,
+  "version": "1.2026.202",
+  "contentRating": "12+",
+  "releaseDate": "2023-05-18T07:00:00.000Z",
+  "lastUpdated": "2026-07-27T16:41:51.000Z",
+  "screenshots": [],
+  "appUrl": "https://apps.apple.com/us/app/chatgpt/id6448311069?uo=4",
   "country": "us",
   "language": "en",
-  "scrapedAt": "2026-06-14T00:00:00.000Z"
+  "scrapedAt": "2026-08-02T00:00:00.000Z"
 }
 ```
 
@@ -195,6 +189,8 @@ This Actor is designed for non-personal app and publisher metadata only. It does
 This Actor is intended for lawful collection and processing of publicly available information only. Users are responsible for ensuring their use complies with source terms, applicable privacy laws, and all local regulations.
 
 Do not use this Actor to collect, store, sell, or misuse personal data without a lawful basis. The Actor author is not responsible for misuse by end users.
+
+This independent Actor is not affiliated with, endorsed by, or sponsored by Apple, Google, or the listed app publishers.
 
 ## License
 

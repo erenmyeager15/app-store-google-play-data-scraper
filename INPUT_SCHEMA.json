@@ -84,7 +84,7 @@
       "type": "integer",
       "description": "Maximum unique app records saved across all selected sources. Unused capacity is reallocated to the remaining source.",
       "editor": "number",
-      "default": 10,
+      "default": 1,
       "minimum": 1,
       "maximum": 1000
     },
