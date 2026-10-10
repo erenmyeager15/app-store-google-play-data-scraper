@@ -18,6 +18,11 @@ import {
   normalizeGooglePackageName,
   normalizeInput,
 } from './input.js';
+import {
+  applyMonitoring,
+  monitoringRecordKey,
+  monitoringStoreName,
+} from './monitoring.js';
 import { containsForbiddenField, recordSafetyIssue } from './recordSafety.js';
 import { classifyRunOutcome } from './runOutcome.js';
 import type { AppRecord, AppleApp, GooglePlayClient } from './types.js';
@@ -78,6 +83,27 @@ test('normalizeInput accepts official direct URLs and does not add a search', ()
   assert.deepEqual(input.searchQueries, []);
   assert.deepEqual(input.appIds, ['310633997']);
   assert.deepEqual(input.packageNames, ['com.whatsapp']);
+});
+
+test('normalizeInput accepts bounded named app monitoring', () => {
+  const input = normalizeInput({
+    sources: ['google_play'],
+    packageNames: ['com.example.app'],
+    trackChanges: true,
+    monitorName: 'us fintech competitors',
+    observationHistoryLimit: 20,
+  });
+  assert.equal(input.trackChanges, true);
+  assert.equal(input.monitorName, 'us fintech competitors');
+  assert.equal(input.observationHistoryLimit, 20);
+  assert.throws(
+    () => normalizeInput({ searchQueries: ['apps'], monitorName: '../shared' }),
+    /monitorName/,
+  );
+  assert.throws(
+    () => normalizeInput({ searchQueries: ['apps'], observationHistoryLimit: 31 }),
+    /observationHistoryLimit/,
+  );
 });
 
 test('normalizeInput rejects empty targets and source-target mismatches', () => {
@@ -330,6 +356,93 @@ test('record safety accepts official store records and rejects host lookalikes',
     recordSafetyIssue(validGoogleRecord({ iconUrl: 'https://images.example.test/icon.png' })) ?? '',
     /approved store media URL/,
   );
+});
+
+test('app monitoring creates a baseline and a useful recurring comparison', () => {
+  const baseline = applyMonitoring(
+    validGoogleRecord({
+      scrapedAt: '2026-10-08T00:00:00.000Z',
+      price: 2.99,
+      currency: 'USD',
+      ratingValue: 4.5,
+      ratingCount: 10_000,
+      installRange: '100,000+',
+      version: '1.0.0',
+      lastUpdated: '2026-10-01T00:00:00.000Z',
+    }),
+    null,
+    'us fintech',
+    12,
+  );
+  assert.equal(baseline.record.monitoringStatus, 'baseline');
+  assert.equal(baseline.record.observationCount, 1);
+  assert.equal(baseline.record.daysSinceStoreUpdate, 7);
+
+  const updated = applyMonitoring(
+    validGoogleRecord({
+      scrapedAt: '2026-10-10T00:00:00.000Z',
+      price: 3.99,
+      currency: 'USD',
+      ratingValue: 4.6,
+      ratingCount: 10_200,
+      installRange: '500,000+',
+      version: '1.1.0',
+      lastUpdated: '2026-10-09T00:00:00.000Z',
+    }),
+    baseline.nextState,
+    'us fintech',
+    12,
+  );
+  assert.equal(updated.record.monitoringStatus, 'updated');
+  assert.deepEqual(updated.record.changedFields, [
+    'price',
+    'ratingValue',
+    'ratingCount',
+    'installRange',
+    'version',
+    'lastUpdated',
+  ]);
+  assert.equal(updated.record.priceDelta, 1);
+  assert.equal(updated.record.ratingCountDelta, 200);
+  assert.equal(updated.record.ratingsPerDay, 100);
+  assert.equal(updated.record.versionChanged, true);
+  assert.match(updated.record.growthSignals?.join(',') ?? '', /new_version/);
+});
+
+test('app monitoring suppresses short-interval rating noise and retains missing baseline values', () => {
+  const baseline = applyMonitoring(
+    validGoogleRecord({
+      scrapedAt: '2026-10-10T00:00:00.000Z',
+      ratingCount: 1_000_000,
+      version: '5.0.0',
+    }),
+    null,
+    'default',
+    2,
+  );
+  const noisy = applyMonitoring(
+    validGoogleRecord({
+      scrapedAt: '2026-10-10T00:05:00.000Z',
+      ratingCount: 1_000_050,
+      version: null,
+    }),
+    baseline.nextState,
+    'default',
+    2,
+  );
+  assert.equal(noisy.record.monitoringStatus, 'partial');
+  assert.equal(noisy.record.ratingCountDelta, null);
+  assert.equal(noisy.record.ratingsPerDay, null);
+  assert.equal(noisy.nextState.history.at(-1)?.version, '5.0.0');
+  assert.equal(noisy.nextState.history.length, 2);
+});
+
+test('monitor storage identifiers are deterministic and do not expose user input', () => {
+  const name = monitoringStoreName('US Fintech Competitors');
+  const key = monitoringRecordKey(validGoogleRecord());
+  assert.match(name, /^app-market-monitor-[a-f0-9]{24}$/);
+  assert.doesNotMatch(name, /fintech/i);
+  assert.match(key, /^APP_[a-f0-9]{40}$/);
 });
 
 test('privacy guard detects forbidden fields recursively', () => {

@@ -25,6 +25,27 @@
     "country": { "type": "string", "title": "Country" },
     "language": { "type": "string", "title": "Language" },
     "scrapedAt": { "type": "string", "title": "Scraped At" }
+    ,"monitorName": { "type": "string", "title": "Monitor" }
+    ,"monitoringStatus": { "type": "string", "title": "Change Status" }
+    ,"firstSeenAt": { "type": "string", "title": "First Seen" }
+    ,"previousSeenAt": { "type": "string", "title": "Previous Check" }
+    ,"observationCount": { "type": "integer", "title": "Observations" }
+    ,"changedFields": { "type": "array", "title": "Changed Fields" }
+    ,"previousPrice": { "type": "number", "title": "Previous Price" }
+    ,"priceDelta": { "type": "number", "title": "Price Delta" }
+    ,"priceChanged": { "type": "boolean", "title": "Price Changed" }
+    ,"previousCurrency": { "type": "string", "title": "Previous Currency" }
+    ,"previousRatingValue": { "type": "number", "title": "Previous Rating" }
+    ,"ratingValueDelta": { "type": "number", "title": "Rating Delta" }
+    ,"previousRatingCount": { "type": "integer", "title": "Previous Ratings" }
+    ,"ratingCountDelta": { "type": "integer", "title": "Ratings Delta" }
+    ,"ratingsPerDay": { "type": "number", "title": "Ratings / Day" }
+    ,"previousInstallRange": { "type": "string", "title": "Previous Installs" }
+    ,"previousVersion": { "type": "string", "title": "Previous Version" }
+    ,"versionChanged": { "type": "boolean", "title": "Version Changed" }
+    ,"previousLastUpdated": { "type": "string", "title": "Previous Store Update" }
+    ,"daysSinceStoreUpdate": { "type": "number", "title": "Days Since Update" }
+    ,"growthSignals": { "type": "array", "title": "Change Signals" }
   },
   "views": {
     "apps": {
@@ -34,6 +55,9 @@
           "source",
           "query",
           "recordKey",
+          "monitoringStatus",
+          "changedFields",
+          "growthSignals",
           "iconUrl",
           "appName",
           "developer",
@@ -42,8 +66,12 @@
           "currency",
           "ratingValue",
           "ratingCount",
+          "ratingCountDelta",
+          "ratingsPerDay",
           "installRange",
           "version",
+          "previousVersion",
+          "versionChanged",
           "contentRating",
           "lastUpdated",
           "country",
@@ -58,6 +86,9 @@
           "source": { "label": "Source" },
           "query": { "label": "Query" },
           "recordKey": { "label": "Record Key" },
+          "monitoringStatus": { "label": "Change Status" },
+          "changedFields": { "label": "Changed Fields" },
+          "growthSignals": { "label": "Signals" },
           "iconUrl": { "label": "Icon", "format": "image" },
           "appName": { "label": "App" },
           "developer": { "label": "Developer" },
@@ -66,8 +97,12 @@
           "currency": { "label": "Currency" },
           "ratingValue": { "label": "Rating" },
           "ratingCount": { "label": "Ratings" },
+          "ratingCountDelta": { "label": "Ratings Delta" },
+          "ratingsPerDay": { "label": "Ratings / Day" },
           "installRange": { "label": "Installs" },
           "version": { "label": "Version" },
+          "previousVersion": { "label": "Previous Version" },
+          "versionChanged": { "label": "Version Changed" },
           "contentRating": { "label": "Content Rating" },
           "lastUpdated": { "label": "Updated" },
           "country": { "label": "Country" },

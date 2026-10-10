@@ -4,10 +4,16 @@ import { lookupAppStore, searchAppStore } from './appstore.js';
 import { allocateBudget, pushUniqueRecords } from './billing.js';
 import { lookupGooglePlay, searchGooglePlay } from './googleplay.js';
 import { normalizeInput } from './input.js';
+import {
+  applyMonitoring,
+  monitoringRecordKey,
+  monitoringStoreName,
+} from './monitoring.js';
 import { assertSafeRecord } from './recordSafety.js';
 import { classifyRunOutcome } from './runOutcome.js';
 import type {
   AppRecord,
+  AppMonitoringState,
   NormalizedInput,
   SourceJobResult,
   SourceName,
@@ -126,6 +132,8 @@ try {
     country: input.country,
     language: input.language,
     maxResults: input.maxResults,
+    trackChanges: input.trackChanges,
+    monitorName: input.trackChanges ? input.monitorName : null,
   });
 
   const seen = new Set<string>();
@@ -137,6 +145,17 @@ try {
   let successfulJobs = 0;
   let failedJobs = 0;
   let stoppedByChargeLimit = false;
+  let stateReadFailures = 0;
+  let stateWriteFailures = 0;
+  const monitoringStatusCounts = {
+    baseline: 0,
+    updated: 0,
+    unchanged: 0,
+    partial: 0,
+  };
+  const monitoringStore = input.trackChanges
+    ? await Actor.openKeyValueStore(monitoringStoreName(input.monitorName))
+    : null;
 
   const addWarning = (warning: SourceWarning): void => {
     warningCount += 1;
@@ -177,8 +196,32 @@ try {
       }
 
       const safeRecords: AppRecord[] = [];
-      for (const record of result.records) {
+      const pendingStates = new Map<string, { key: string; state: AppMonitoringState }>();
+      for (const rawRecord of result.records) {
         try {
+          let record = rawRecord;
+          if (monitoringStore) {
+            const key = monitoringRecordKey(record);
+            let previousState: AppMonitoringState | null = null;
+            try {
+              previousState = await monitoringStore.getValue<AppMonitoringState>(key);
+            } catch (error) {
+              stateReadFailures += 1;
+              addWarning({
+                source,
+                operation: job.label,
+                message: `Change-history read failed; returning a fresh baseline: ${safeErrorMessage(error)}`,
+              });
+            }
+            const monitored = applyMonitoring(
+              record,
+              previousState,
+              input.monitorName,
+              input.observationHistoryLimit,
+            );
+            record = monitored.record;
+            pendingStates.set(record.recordKey, { key, state: monitored.nextState });
+          }
           safeRecords.push(assertSafeRecord(record));
         } catch (error) {
           addWarning({
@@ -202,7 +245,27 @@ try {
         safeRecords,
         seen,
         Math.min(jobBudget, sourceTarget - sourceSaved, input.maxResults - savedCount),
-        (record) => Actor.pushData(record, CHARGE_EVENT),
+        async (record) => {
+          const chargeResult = await Actor.pushData(record, CHARGE_EVENT);
+          const recordWasSaved = chargeResult.chargedCount > 0 || !chargeResult.eventChargeLimitReached;
+          if (recordWasSaved && record.monitoringStatus) {
+            monitoringStatusCounts[record.monitoringStatus] += 1;
+          }
+          const pending = pendingStates.get(record.recordKey);
+          if (recordWasSaved && monitoringStore && pending) {
+            try {
+              await monitoringStore.setValue(pending.key, pending.state);
+            } catch (error) {
+              stateWriteFailures += 1;
+              addWarning({
+                source,
+                operation: job.label,
+                message: `App row was saved, but its change history could not be updated: ${safeErrorMessage(error)}`,
+              });
+            }
+          }
+          return chargeResult;
+        },
       );
       savedCount += saveResult.saved;
       sourceSaved += saveResult.saved;
@@ -230,6 +293,14 @@ try {
     sources: input.sources,
     country: input.country,
     language: input.language,
+    changeTracking: {
+      enabled: input.trackChanges,
+      monitorName: input.trackChanges ? input.monitorName : null,
+      historyLimit: input.trackChanges ? input.observationHistoryLimit : null,
+      statusCounts: monitoringStatusCounts,
+      stateReadFailures,
+      stateWriteFailures,
+    },
     warnings,
   });
 

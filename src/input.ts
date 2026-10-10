@@ -12,6 +12,9 @@ const ALLOWED_FIELDS = new Set([
   'country',
   'language',
   'includeRatingsSummary',
+  'trackChanges',
+  'monitorName',
+  'observationHistoryLimit',
   'maxResults',
   'userAgent',
   'proxyConfiguration',
@@ -193,6 +196,20 @@ export function normalizeInput(rawInput: unknown): NormalizedInput {
 
   const includeRatingsSummary = rawInput.includeRatingsSummary ?? true;
   if (typeof includeRatingsSummary !== 'boolean') throw new Error('includeRatingsSummary must be a boolean.');
+  const trackChanges = rawInput.trackChanges ?? false;
+  if (typeof trackChanges !== 'boolean') throw new Error('trackChanges must be a boolean.');
+  const monitorName = readString(rawInput.monitorName, 'monitorName', 64) ?? 'default';
+  if (!/^[A-Za-z0-9 _-]+$/.test(monitorName)) {
+    throw new Error('monitorName may contain only letters, numbers, spaces, underscores, and hyphens.');
+  }
+  const observationHistoryLimit = rawInput.observationHistoryLimit ?? 12;
+  if (
+    !Number.isInteger(observationHistoryLimit)
+    || Number(observationHistoryLimit) < 2
+    || Number(observationHistoryLimit) > 30
+  ) {
+    throw new Error('observationHistoryLimit must be an integer between 2 and 30.');
+  }
   const maxResults = rawInput.maxResults ?? 1;
   if (!Number.isInteger(maxResults) || Number(maxResults) < 1 || Number(maxResults) > 1000) {
     throw new Error('maxResults must be an integer between 1 and 1000.');
@@ -211,6 +228,9 @@ export function normalizeInput(rawInput: unknown): NormalizedInput {
     country,
     language,
     includeRatingsSummary,
+    trackChanges,
+    monitorName,
+    observationHistoryLimit: Number(observationHistoryLimit),
     maxResults: Number(maxResults),
     userAgent,
     ...(proxyConfiguration ? { proxyConfiguration } : {}),

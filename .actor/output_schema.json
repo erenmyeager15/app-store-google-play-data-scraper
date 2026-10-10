@@ -1,13 +1,13 @@
 {
   "actorOutputSchemaVersion": 1,
   "title": "App Store & Google Play Data Scraper Output",
-  "description": "Structured app metadata records plus a machine-readable run summary that distinguishes success, empty results, partial source failures, spending-limit stops, and total failure.",
+  "description": "Structured app metadata and optional portfolio-change records plus a machine-readable run summary that distinguishes success, empty results, partial source failures, spending-limit stops, and total failure.",
   "type": "object",
   "properties": {
     "results": {
       "type": "string",
       "title": "App store metadata records",
-      "description": "Clean dataset items containing non-personal public app metadata, ratings summary, pricing, version, media, country, and store URL data.",
+      "description": "Clean dataset items containing public app metadata plus optional version, price, rating, install-range, and update history for scheduled portfolios.",
       "template": "{{links.apiDefaultDatasetUrl}}/items"
     },
     "runSummary": {

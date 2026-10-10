@@ -1,6 +1,6 @@
-# App Store & Google Play Data Scraper
+# App Store & Google Play Competitor Monitor
 
-Collect normalized, non-personal app metadata from the Apple App Store and Google Play into one Apify dataset for ASO, competitor tracking, app-market research, pricing/version monitoring, and product intelligence.
+Collect normalized, non-personal app metadata from the Apple App Store and Google Play into one Apify dataset. Build scheduled US or global competitor portfolios with persistent version, price, rating, install-range, and store-update history.
 
 This Actor focuses on app-level public metadata and aggregate ratings. It does not collect individual reviews, reviewer identities, developer contact fields, emails, phone numbers, or user-level data.
 
@@ -11,6 +11,7 @@ This Actor focuses on app-level public metadata and aggregate ratings. It does n
 - Commercial data: price, currency, Google Play install range when available, version, content rating, release date, and last update date.
 - Aggregate ratings only: rating value, rating count, and Google Play rating histogram when available.
 - Store media: icon URL, screenshots, and redacted app description.
+- Optional portfolio intelligence: baseline/updated/unchanged/partial status, changed fields, previous values, rating velocity, days since the last store update, and release/price/rating signals.
 
 ## Supported Sources
 
@@ -72,6 +73,26 @@ Apple data is fetched through the public iTunes Search and Lookup APIs. Google P
 }
 ```
 
+### Monitor a US competitor portfolio
+
+Run this input on a daily or weekly schedule. Keep `monitorName`, app identifiers, country, and language stable so each app is compared with its own prior observations.
+
+```json
+{
+  "sources": ["app_store", "google_play"],
+  "appIds": ["6448311069", "310633997"],
+  "packageNames": ["com.openai.chatgpt", "com.whatsapp"],
+  "country": "us",
+  "language": "en",
+  "trackChanges": true,
+  "monitorName": "us-ai-and-messaging",
+  "observationHistoryLimit": 12,
+  "maxResults": 4
+}
+```
+
+Every successfully checked app is returned and billed, including unchanged apps. This makes scheduled exports complete and predictable. History is bounded and stored privately under a hashed monitor identifier; a temporarily missing source metric does not erase the last good comparison baseline.
+
 ## Input Fields
 
 | Field | Type | Default | Description |
@@ -83,6 +104,9 @@ Apple data is fetched through the public iTunes Search and Lookup APIs. Google P
 | `country` | string | `us` | Store country/region code, such as `us`, `in`, or `gb`. |
 | `language` | string | `en` | Two-letter language code. Google Play receives it directly. Apple returns English for most values and Japanese for `ja`, matching Apple's supported API response languages. |
 | `includeRatingsSummary` | boolean | `true` | Include aggregate ratings and Google Play histogram when available. Individual reviews are never output. |
+| `trackChanges` | boolean | `false` | Add persistent cross-run change intelligence to every saved app row. |
+| `monitorName` | string | `default` | Stable name that separates one app portfolio's history from another. |
+| `observationHistoryLimit` | integer | `12` | Retained observations per app, from 2 to 30. |
 | `maxResults` | integer | `1` | Maximum clean app metadata records to save across selected sources, capped at `1000`. |
 | `userAgent` | string | `AppStoreGooglePlayDataScraper/1.0 app-market-research` | Descriptive User-Agent for public API/page requests. |
 | `proxyConfiguration` | object | No proxy | Optional for Google Play. If a requested proxy cannot be created, the run stops instead of silently using a direct connection. Apple iTunes API requests never use this proxy setting. |
@@ -101,6 +125,7 @@ Each dataset item is one clean app-level record.
 | Ratings summary | `ratingValue`, `ratingCount`, `ratingHistogram` |
 | Version and dates | `version`, `releaseDate`, `lastUpdated` |
 | Media and text | `description`, `iconUrl`, `screenshots` |
+| Portfolio monitoring | `monitoringStatus`, `changedFields`, `growthSignals`, `previousPrice`, `priceDelta`, `previousRatingCount`, `ratingCountDelta`, `ratingsPerDay`, `previousVersion`, `versionChanged`, `daysSinceStoreUpdate` |
 
 ## Verified Sample Output
 
@@ -148,7 +173,7 @@ Every run writes `RUN_SUMMARY` to the default key-value store. The output schema
 | `charge_limit` | Collection stopped at the user's maximum charge limit. |
 | `failed` | Every attempted store operation failed; the Actor run fails instead of returning a false empty result. |
 
-The summary includes saved, attempted, successful, and failed operation counts; warning totals; locale; selected sources; and spending-limit status. This makes schedules, webhooks, API clients, and AI-agent workflows able to distinguish a real zero-result search from a source outage.
+The summary includes saved, attempted, successful, and failed operation counts; warning totals; locale; selected sources; spending-limit status; monitoring status totals; and history read/write health. This makes schedules, webhooks, API clients, and AI-agent workflows able to distinguish a real zero-result search from a source outage.
 
 ## Tips For Better Results
 
@@ -168,6 +193,8 @@ The summary includes saved, attempted, successful, and failed operation counts; 
 - Store-hosted icons and screenshots remain subject to the source platforms' terms and applicable brand or media-use rules.
 - Descriptions are redacted for email/phone-like text before output.
 - Ratings and update timestamps reflect the store data available at run time.
+- Change history is scoped by source, app ID, country, language, and monitor name. Avoid overlapping schedules that update the same monitor at the same time.
+- Rating-count noise below 0.01% is ignored for change signals. Rating velocity is calculated only when observations are at least one hour apart.
 
 ## Pricing
 

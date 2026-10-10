@@ -79,6 +79,33 @@
       "editor": "checkbox",
       "default": true
     },
+    "trackChanges": {
+      "title": "Track app changes across runs",
+      "type": "boolean",
+      "description": "Keep a bounded private history for each app and return version, price, rating, install-range, and update changes on every scheduled check.",
+      "editor": "checkbox",
+      "default": false,
+      "sectionCaption": "App Portfolio Monitoring"
+    },
+    "monitorName": {
+      "title": "Monitor name",
+      "type": "string",
+      "description": "Stable name for one app portfolio, such as us-fintech-competitors. Histories with different names stay separate.",
+      "editor": "textfield",
+      "default": "default",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9 _-]+$"
+    },
+    "observationHistoryLimit": {
+      "title": "Observations retained per app",
+      "type": "integer",
+      "description": "Maximum private observations retained per app for comparisons and rating velocity.",
+      "editor": "number",
+      "default": 12,
+      "minimum": 2,
+      "maximum": 30
+    },
     "maxResults": {
       "title": "Maximum app records",
       "type": "integer",

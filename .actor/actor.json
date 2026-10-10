@@ -1,8 +1,8 @@
 {
   "actorSpecification": 1,
   "name": "app-store-google-play-data-scraper",
-  "title": "App Store & Google Play Data Scraper",
-  "description": "Search or look up Apple App Store and Google Play apps. Returns normalized prices, aggregate ratings, installs, versions, update dates, descriptions, screenshots, and official store URLs for ASO, competitor monitoring, and app-market research.",
+  "title": "App Store & Google Play Competitor Monitor",
+  "description": "Search, look up, and monitor Apple App Store and Google Play apps. Track versions, prices, ratings, installs, update dates, and change history across scheduled US or global app portfolios.",
   "version": "1.0",
   "dockerfile": "Dockerfile",
   "input": "../INPUT_SCHEMA.json",
@@ -36,7 +36,7 @@
   },
   "defaultRunOptions": {
     "build": "latest",
-    "memoryMbytes": 512,
+    "memoryMbytes": 256,
     "timeoutSecs": 3600
   }
 }

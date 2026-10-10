@@ -15,6 +15,9 @@ export interface ActorInput {
   country?: string;
   language?: string;
   includeRatingsSummary?: boolean;
+  trackChanges?: boolean;
+  monitorName?: string;
+  observationHistoryLimit?: number;
   maxResults?: number;
   userAgent?: string;
   proxyConfiguration?: ProxyInput;
@@ -28,6 +31,9 @@ export interface NormalizedInput {
   country: string;
   language: string;
   includeRatingsSummary: boolean;
+  trackChanges: boolean;
+  monitorName: string;
+  observationHistoryLimit: number;
   maxResults: number;
   userAgent: string;
   proxyConfiguration?: ProxyInput;
@@ -67,6 +73,45 @@ export interface AppRecord {
   country: string;
   language: string;
   scrapedAt: string;
+  monitorName?: string | null;
+  monitoringStatus?: 'baseline' | 'updated' | 'unchanged' | 'partial' | null;
+  firstSeenAt?: string | null;
+  previousSeenAt?: string | null;
+  observationCount?: number | null;
+  changedFields?: string[];
+  previousPrice?: number | null;
+  priceDelta?: number | null;
+  priceChanged?: boolean | null;
+  previousCurrency?: string | null;
+  previousRatingValue?: number | null;
+  ratingValueDelta?: number | null;
+  previousRatingCount?: number | null;
+  ratingCountDelta?: number | null;
+  ratingsPerDay?: number | null;
+  previousInstallRange?: string | null;
+  previousVersion?: string | null;
+  versionChanged?: boolean | null;
+  previousLastUpdated?: string | null;
+  daysSinceStoreUpdate?: number | null;
+  growthSignals?: string[];
+}
+
+export interface AppObservation {
+  checkedAt: string;
+  price: number | null;
+  currency: string | null;
+  ratingValue: number | null;
+  ratingCount: number | null;
+  installRange: string | null;
+  version: string | null;
+  lastUpdated: string | null;
+}
+
+export interface AppMonitoringState {
+  schemaVersion: 1;
+  firstSeenAt: string;
+  observationCount: number;
+  history: AppObservation[];
 }
 
 export type SourceJobOutcome = 'success' | 'partial' | 'failed';

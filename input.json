@@ -6,6 +6,9 @@
   "country": "us",
   "language": "en",
   "includeRatingsSummary": true,
+  "trackChanges": true,
+  "monitorName": "us-messaging-sample",
+  "observationHistoryLimit": 12,
   "maxResults": 2,
   "proxyConfiguration": {
     "useApifyProxy": false
